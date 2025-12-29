@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>电子包浆 - 赛博做旧模拟器</title>
+    <link rel="stylesheet" href="document.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<div class="app" :data-runing="runing" v-cloak>
+    <div class="main-container">
+        
+        <div class="preview-pane">
+            <header>
+                <h1>电子包浆中心</h1>
+                <p>CYBER PATINA // 赛博做旧虚拟器</p>
+            </header>
+
+            <div class="output-wrapper">
+                <div class="output-box">
+                    <div class="img-container" 
+                         @dragover.prevent 
+                         @drop.prevent="handleSourceDrop"
+                         title="将右侧结果图拖入此处以叠加包浆">
+                        <span class="label">原图 SOURCE</span>
+                        <div class="img-scroll-box">
+                            <img class="source-image" :src="src" ref="img" @load="load()" rel:auto_play="0">
+                        </div>
+                    </div>
+                    
+                    <!-- 结果区域 -->
+                    <div class="img-container">
+                        <span class="label">结果 OUTPUT</span>
+                        <div class="img-scroll-box">
+                            <img class="output-image" 
+                                 :src="output" 
+                                 v-if="output" 
+                                 draggable="true" 
+                                 @dragstart="handleDragStart">
+                            <div v-else class="placeholder">
+                                等待输入<br>
+                                <small style="font-size:12px; margin-top:5px; display:block; opacity:0.7">支持 JPG / PNG / GIF / WEBP</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-bar">
+                    <div class="status-progress" 
+                         :style="{ width: runing ? ((current / (config.isPop?config.pop*config.pop:config.round)) * 100) + '%' : ((isLoadingGIF||isPackingGIF)?'100%':'0%') }">
+                    </div>
+                    <div class="status-text">
+                        <span v-if="isLoadingGIF">读取 GIF 中...</span>
+                        <span v-else-if="isPackingGIF">生成 GIF 中...</span>
+                        <span v-else-if="runing">处理进度: {{current}}/{{config.isPop?config.pop*config.pop:config.round}}</span>
+                        <span v-else>🟢 系统就绪 SYSTEM READY</span>
+                        <span style="opacity:0.5">V1.0</span>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="primary-btn" @click="chooseFileAndSetImageSrc">上传图片</button>
+                    
+                    <button class="primary-btn" 
+                            :class="{ disabled: runing }"
+                            v-if="isShouldRedoGIF && isGIF" 
+                            @click="_patina">重渲GIF</button>
+                    
+                    <a class="primary-btn save-btn" 
+                       :class="{ disabled: runing }"
+                       @click="save" 
+                       :href="output" 
+                       :download="downloadFileName">保存图片</a>
+                </div>
+                
+                <div class="tips-box">
+                    <span>💡 提示：按住右侧图片拖拽至左侧，或</span>
+                    <button class="mini-btn" 
+                            :class="{ disabled: runing || !output }"
+                            @click="recycleOutput">
+                        ♻️ 循环包浆
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：设置面板 (Settings Pane) -->
+        <div class="settings-pane" v-if="config">
+            <div class="settings-inner">
+                <div class="settings-card">
+                    <h2>参数</h2>
+
+                    <div class="section-group">
+                        <span class="section-title">快速预设</span>
+                        <div class="btn-group">
+                            <button class="preset-btn" 
+                                    :class="{ active: activePreset === 'default' }"
+                                    @click="applyPreset('default')">默认</button>
+                            
+                            <button class="preset-btn" 
+                                    :class="{ active: activePreset === 'deepfried' }"
+                                    @click="applyPreset('deepfried', {green:true, quality:10, round:20, contrast:1.2})">电子油炸</button>
+                            
+                            <button class="preset-btn" 
+                                    :class="{ active: activePreset === 'old' }"
+                                    @click="applyPreset('old', {green:false, darkNoise:80, contrast:0.9, round:5})">老照片</button>
+                            
+                            <button class="preset-btn" 
+                                    :class="{ active: activePreset === 'clean' }"
+                                    @click="applyPreset('clean', {green:false, darkNoise:0, quality:100, round:1})">高清原画</button>
+                        </div>
+                    </div>
+
+                    <!-- 做旧程度 -->
+                    <div class="section-group">
+                        <h3 class="section-title-block">做旧程度</h3>
+                        
+                        <div class="control-row" v-if="!config.isPop">
+                            <div class="label-row">
+                                <span>包浆年份 (轮数)</span>
+                                <span>{{config.round}} 年</span>
+                            </div>
+                            <input type="range" min=1 :max="superMode?1000:100" step="1" v-model.number="config.round">
+                        </div>
+
+                        <div class="control-row" v-else>
+                             <div class="label-row">
+                                <span>波普网格重复</span>
+                                <span>{{config.pop}} x {{config.pop}}</span>
+                            </div>
+                            <input type="range" min=1 :max="superMode?50:12" step="1" v-model.number="config.pop">
+                        </div>
+
+                        <div class="control-row">
+                            <div class="label-row">
+                                <span>JPEG 压缩画质</span>
+                                <span>{{config.quality}}%</span>
+                            </div>
+                            <input type="range" min=0 max="100" step="1" v-model.number="config.quality">
+                        </div>
+
+                         <div class="control-row checkbox-row">
+                            <label>
+                                <input type="checkbox" v-model="config.green">
+                                <span class="checkmark"></span>
+                                绿图模式 (Green Tint)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 画面瑕疵 -->
+                    <div class="section-group">
+                        <h3 class="section-title-block">画面瑕疵</h3>
+                        
+                        <div class="control-row">
+                            <div class="label-row">
+                                <span>噪点强度</span>
+                                <span>{{config.darkNoise}}</span>
+                            </div>
+                            <input type="range" min=0 max="125" step="1" v-model.number="config.darkNoise">
+                        </div>
+
+                        <div class="control-row">
+                            <div class="label-row">
+                                <span>对比度</span>
+                                <span>{{config.contrast}}</span>
+                            </div>
+                            <input type="range" min=0 max=2 step="0.1" v-model.number="config.contrast">
+                        </div>
+
+                        <div class="control-row">
+                            <div class="label-row">
+                                <span>模糊 (像素混合)</span>
+                                <span>{{config.mix}}</span>
+                            </div>
+                            <input type="range" min=1 max=20 step="0.1" v-model.number="config.mix">
+                        </div>
+                    </div>
+
+                    <!-- 输出设置 -->
+                     <div class="section-group">
+                        <h3 class="section-title-block">输出设置</h3>
+                         <div class="control-row checkbox-row">
+                            <label>
+                                <input type="checkbox" v-model="config.preview">
+                                <span class="checkmark"></span>
+                                缩略图预览模式 (性能优先)
+                            </label>
+                        </div>
+                        <div class="control-row" v-if="config.preview">
+                            <div class="label-row">
+                                <span>缩略图最大边长</span>
+                                <span>{{config.maxWidth}}px</span>
+                            </div>
+                            <input type="range" min="200" max="1200" step="100" v-model.number="config.maxWidth">
+                        </div>
+                        <p class="hint-text" v-if="!config.preview">⚠️ 当前为原图输出模式，大图生成较慢。</p>
+                    </div>
+
+                    <!-- 水印注入 -->
+                    <div class="section-group">
+                        <h3 class="section-title-block">信息注入</h3>
+                        
+                        <div class="control-row checkbox-row">
+                            <label>
+                                <input type="checkbox" v-model="config.watermark">
+                                <span class="checkmark"></span>
+                                启用虚拟水印
+                            </label>
+                        </div>
+
+                        <div class="control-row" v-if="config.watermark">
+                            <div class="label-row">
+                                <span>用户名列表 (换行分割)</span>
+                            </div>
+                            <textarea class="retro-textarea" v-model.lazy="userNamesText" spellcheck="false" placeholder="输入用户名..."></textarea>
+                        </div>
+
+                        <!-- 3. 新增：九宫格水印位置选择 -->
+                        <div class="control-row" v-if="config.watermark">
+                            <div class="label-row">
+                                <span>出现位置 (九宫格)</span>
+                            </div>
+                            <div class="position-grid-wrapper">
+                                <div class="grid-3x3">
+                                    <!-- 遍历 config.watermarkLocations -->
+                                    <div 
+                                        v-for="(active, index) in config.watermarkLocations" 
+                                        :key="index"
+                                        class="grid-cell"
+                                        :class="{ active: active }"
+                                        @click="toggleWatermarkLocation(index)"
+                                        :title="'切换位置 ' + (index+1)">
+                                    </div>
+                                </div>
+                                <div class="grid-actions">
+                                    <button class="text-btn" @click="setAllWatermarkLocations(true)">全选</button>
+                                    <button class="text-btn" @click="setAllWatermarkLocations(false)">清空</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="control-row" v-if="config.watermark">
+                            <div class="label-row">
+                                <span>水印密度 (出现频率)</span>
+                                <span>{{config.watermarkDensity}}%</span>
+                            </div>
+                            <input type="range" min=0 max=100 step="5" v-model.number="config.watermarkDensity">
+                        </div>
+
+                         <div class="control-row" v-if="config.watermark">
+                            <div class="label-row">
+                                <span>水印不透明度</span>
+                                <span>{{config.watermarkShadowAlpha}}</span>
+                            </div>
+                            <input type="range" min=.1 max=1 step="0.1" v-model.number="config.watermarkShadowAlpha">
+                        </div>
+                    </div>
+                    
+                    <!-- 高级选项 -->
+                    <div class="section-group" style="border:none; padding-bottom:0; margin-bottom:10px;">
+                         <div class="control-row checkbox-row">
+                            <label>
+                                <input type="checkbox" v-model="debug">
+                                <span class="checkmark"></span>
+                                显示高级选项
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="advanced-box" v-if="debug">
+                        <div class="control-row">
+                            <div class="label-row">
+                                 <span>分辨率缩放</span>
+                                 <span>{{config.zoom}}%</span>
+                            </div>
+                             <input type="range" min=1 max=100 step="1" v-model.number="config.zoom">
+                        </div>
+                        <div class="control-row checkbox-row">
+                            <label>
+                                <input type="checkbox" v-model="config.rand">
+                                <span class="checkmark"></span>
+                                随机化效果
+                            </label>
+                        </div>
+                         <div class="control-row checkbox-row" v-if="!isGIF">
+                            <label>
+                                <input type="checkbox" v-model="config.isPop">
+                                <span class="checkmark"></span>
+                                波普艺术模式
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.6.11/vue.min.js"></script>
+<script src="patina-gif/lib/libgif.js"></script>
+<script src="patina-gif/lib/rubbable.js"></script>
+<script src="patina-gif/lib/gif.js"></script>
+<script src="patina.js"></script>
+<script src="patina-gif/patina-gif.js"></script>
+<script src="document.js"></script>
+</body>
+</html>
