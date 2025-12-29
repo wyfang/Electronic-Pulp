@@ -1,6 +1,7 @@
 @font-face {
 	font-family: ZpixLocal;
 	src: url(zpix-split.woff);
+    font-display: swap;
 }
 
 :root {
