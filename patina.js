@@ -125,10 +125,10 @@ const randName = userNames=>{
 
 
 let canvas = document.createElement('canvas')
-let ctx = canvas.getContext('2d')
+let ctx = canvas.getContext('2d', { willReadFrequently: true }) // 修改了这里
 
 let popCanvas = document.createElement('canvas')
-let popCtx = popCanvas.getContext('2d')
+let popCtx = popCanvas.getContext('2d', { willReadFrequently: true }) // 修改了这里
 
 let lastConfigString = null;
 const patina = (imageEl, _config, app)=>{
