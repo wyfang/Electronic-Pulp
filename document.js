@@ -349,7 +349,12 @@ const app = new Vue({
 			}
 		},
 		userNamesText(text){
-			this.config.userNames = this.userNamesText.trim().split('\n')
+            // 修改：如果用户清空了输入框，使用默认列表；否则使用输入框内容
+			if (!text || text.trim() === '') {
+                this.config.userNames = defaultUserNamesText.trim().split('\n');
+            } else {
+                this.config.userNames = text.trim().split('\n');
+            }
 		}
 	},
 	computed:{
